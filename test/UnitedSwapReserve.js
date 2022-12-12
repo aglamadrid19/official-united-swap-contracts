@@ -6,34 +6,33 @@ const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
-describe("UnitedSwap Token", function () {
+describe("UnitedSwap Reserve", function () {
   // We define a fixture to reuse the same setup in every test.
   // We use loadFixture to run this setup once, snapshot that state,
   // and reset Hardhat Network to that snapshot in every test.
-  async function deployUnitedSwapTokenFixture() {
-    // const ONE_YEAR_IN_SECS = 365 * 24 * 60 * 60;
-    // const ONE_GWEI = 1_000_000_000;
-
-    // const lockedAmount = ONE_GWEI;
-    // const unlockTime = (await time.latest()) + ONE_YEAR_IN_SECS;
-
-    // Contracts are deployed using the first signer/account by default
-    const [owner, otherAccount] = await ethers.getSigners();
+  async function deployUnitedSwapReserveFixture() {
+    const [owner, burnAdmin, otherAccount] = await ethers.getSigners();
 
     const UnitedSwapToken = await ethers.getContractFactory("UnitedSwapToken");
     const unitedswaptoken = await UnitedSwapToken.deploy();
 
     unitedswaptoken.deployed()
 
-    return { unitedswaptoken, owner, otherAccount };
+    const UnitedSwapReserve = await ethers.getContractFactory("UnitedSwapReserve");
+    const unitedswapreserve = await UnitedSwapReserve.deploy(unitedswaptoken.address, burnAdmin.address);
+
+    await unitedswapreserve.deployed()
+    await unitedswaptoken.transferOwnership(unitedswapreserve.address)
+
+    return { unitedswapreserve, unitedswaptoken, owner, otherAccount };
   }
 
-  describe("Basic checks", function () {
-    it("Should set the right owner", async function () {
+  describe("Deployment", function () {
+    it("Should be deployed", async function () {
       const {
         unitedswaptoken,
         owner
-      } = await loadFixture(deployUnitedSwapTokenFixture);
+      } = await loadFixture(deployUnitedSwapReserveFixture);
 
       expect(await unitedswaptoken.owner()).to.equal(owner.address);
     });
@@ -58,7 +57,8 @@ describe("UnitedSwap Token", function () {
     it("Should mint if called by owner", async function () {
       const { 
         unitedswaptoken,
-        owner
+        owner,
+        otherAccount
       } = await loadFixture(deployUnitedSwapTokenFixture);
 
       const mintAmount = ethers.utils.parseUnits("100");
@@ -73,10 +73,12 @@ describe("UnitedSwap Token", function () {
     it("Should not mint if called by otherAccount", async function () {
       const { 
         unitedswaptoken,
+        owner,
         otherAccount
       } = await loadFixture(deployUnitedSwapTokenFixture);
 
       const mintAmount = ethers.utils.parseUnits("100");
+      let ownerBalance;
 
       expect(await unitedswaptoken.totalSupply()).to.equal("0");
 

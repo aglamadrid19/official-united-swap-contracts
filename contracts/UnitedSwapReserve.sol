@@ -8,14 +8,13 @@ import "@openzeppelin-3.2.0/contracts/math/SafeMath.sol";
 import "@openzeppelin-3.2.0/contracts/utils/ReentrancyGuard.sol";
 import "./interfaces/IBEP20.sol";
 import "./SafeBEP20.sol";
-import "./interfaces/IMasterChef.sol";
 
 /// @notice The (older) MasterChef contract gives out a constant number of CAKE tokens per block.
 /// It is the only address with minting rights for CAKE.
 /// The idea for this MasterChef V2 (MCV2) contract is therefore to be the owner of a dummy token
 /// that is deposited into the MasterChef V1 (MCV1) contract.
 /// The allocation point for this pool on MCV1 is the total allocation point for all pools that receive incentives.
-contract MasterChefV2 is Ownable, ReentrancyGuard {
+contract UnitedSwapReserve is Ownable, ReentrancyGuard {
     using SafeMath for uint256;
     using SafeBEP20 for IBEP20;
 
@@ -58,8 +57,6 @@ contract MasterChefV2 is Ownable, ReentrancyGuard {
         bool isRegular;
     }
 
-    /// @notice Address of MCV1 contract.
-    IMasterChef public immutable MASTER_CHEF;
     /// @notice Address of CAKE contract.
     IBEP20 public immutable CAKE;
 
@@ -77,9 +74,6 @@ contract MasterChefV2 is Ownable, ReentrancyGuard {
     mapping(uint256 => mapping(address => UserInfo)) public userInfo;
     /// @notice The whitelist of addresses allowed to deposit in special pools.
     mapping(address => bool) public whiteList;
-
-    /// @notice The pool id of the MCV2 mock token pool in MCV1.
-    uint256 public immutable MASTER_PID;
     /// @notice Total regular allocation points. Must be the sum of all regular pools' allocation points.
     uint256 public totalRegularAllocPoint;
     /// @notice Total special allocation points. Must be the sum of all special pools' allocation points.
@@ -118,19 +112,13 @@ contract MasterChefV2 is Ownable, ReentrancyGuard {
     event UpdateBoostContract(address indexed boostContract);
     event UpdateBoostMultiplier(address indexed user, uint256 pid, uint256 oldMultiplier, uint256 newMultiplier);
 
-    /// @param _MASTER_CHEF The PancakeSwap MCV1 contract address.
     /// @param _CAKE The CAKE token contract address.
-    /// @param _MASTER_PID The pool id of the dummy pool on the MCV1.
     /// @param _burnAdmin The address of burn admin.
     constructor(
-        IMasterChef _MASTER_CHEF,
         IBEP20 _CAKE,
-        uint256 _MASTER_PID,
         address _burnAdmin
     ) public {
-        MASTER_CHEF = _MASTER_CHEF;
         CAKE = _CAKE;
-        MASTER_PID = _MASTER_PID;
         burnAdmin = _burnAdmin;
     }
 
@@ -140,21 +128,6 @@ contract MasterChefV2 is Ownable, ReentrancyGuard {
     modifier onlyBoostContract() {
         require(boostContract == msg.sender, "Ownable: caller is not the boost contract");
         _;
-    }
-
-    /// @notice Deposits a dummy token to `MASTER_CHEF` MCV1. This is required because MCV1 holds the minting permission of CAKE.
-    /// It will transfer all the `dummyToken` in the tx sender address.
-    /// The allocation point for the dummy pool on MCV1 should be equal to the total amount of allocPoint.
-    /// @param dummyToken The address of the BEP-20 token to be deposited into MCV1.
-    function init(IBEP20 dummyToken) external onlyOwner {
-        uint256 balance = dummyToken.balanceOf(msg.sender);
-        require(balance != 0, "MasterChefV2: Balance must exceed 0");
-        dummyToken.safeTransferFrom(msg.sender, address(this), balance);
-        dummyToken.approve(address(MASTER_CHEF), balance);
-        MASTER_CHEF.deposit(MASTER_PID, balance);
-        // MCV2 start to earn CAKE reward from current block in MCV1 pool
-        lastBurnedBlock = block.number;
-        emit Init();
     }
 
     /// @notice Returns the number of MCV2 pools.
@@ -176,7 +149,7 @@ contract MasterChefV2 is Ownable, ReentrancyGuard {
         bool _withUpdate
     ) external onlyOwner {
         require(_lpToken.balanceOf(address(this)) >= 0, "None BEP20 tokens");
-        // stake CAKE token will cause staked token and reward token mixed up,
+        // stake USToken will cause staked token and reward token mixed up,
         // may cause staked tokens withdraw as reward token,never do it.
         require(_lpToken != CAKE, "CAKE token can't be added to farm pools");
 
@@ -362,11 +335,6 @@ contract MasterChefV2 is Ownable, ReentrancyGuard {
         emit Withdraw(msg.sender, _pid, _amount);
     }
 
-    /// @notice Harvests CAKE from `MASTER_CHEF` MCV1 and pool `MASTER_PID` to MCV2.
-    function harvestFromMasterChef() public {
-        MASTER_CHEF.deposit(MASTER_PID, 0);
-    }
-
     /// @notice Withdraw without caring about the rewards. EMERGENCY ONLY.
     /// @param _pid The id of the pool. See `poolInfo`.
     function emergencyWithdraw(uint256 _pid) external nonReentrant {
@@ -528,10 +496,6 @@ contract MasterChefV2 is Ownable, ReentrancyGuard {
     /// @param _amount transfer CAKE amounts.
     function _safeTransfer(address _to, uint256 _amount) internal {
         if (_amount > 0) {
-            // Check whether MCV2 has enough CAKE. If not, harvest from MCV1.
-            if (CAKE.balanceOf(address(this)) < _amount) {
-                harvestFromMasterChef();
-            }
             uint256 balance = CAKE.balanceOf(address(this));
             if (balance < _amount) {
                 _amount = balance;
