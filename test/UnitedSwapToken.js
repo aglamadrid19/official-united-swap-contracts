@@ -138,5 +138,21 @@ describe("UnitedSwap Token", function () {
       await unitedswaptoken.increaseAllowance(otherAccount.address, approveAmmount.mul(2))
       await unitedswaptoken.decreaseAllowance(otherAccount.address, approveAmmount.div(2))
     });
+
+    it("Should check, set, increase, and decrease approve/allowance", async function () {
+      const {
+        unitedswaptoken,
+        owner,
+        otherAccount
+      } = await loadFixture(deployUnitedSwapTokenFixture);
+
+      const approveAmmount = ethers.utils.parseUnits("100");
+
+      expect(await unitedswaptoken.allowance(owner.address, otherAccount.address)).to.equal(0);
+      await unitedswaptoken.approve(otherAccount.address, approveAmmount)
+      expect(await unitedswaptoken.allowance(owner.address, otherAccount.address)).to.equal(approveAmmount);
+      await unitedswaptoken.increaseAllowance(otherAccount.address, approveAmmount.mul(2))
+      await unitedswaptoken.decreaseAllowance(otherAccount.address, approveAmmount.div(2))
+    });
   });
 });
