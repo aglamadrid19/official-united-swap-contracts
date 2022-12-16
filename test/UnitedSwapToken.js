@@ -11,13 +11,6 @@ describe("UnitedSwap Token", function () {
   // We use loadFixture to run this setup once, snapshot that state,
   // and reset Hardhat Network to that snapshot in every test.
   async function deployUnitedSwapTokenFixture() {
-    // const ONE_YEAR_IN_SECS = 365 * 24 * 60 * 60;
-    // const ONE_GWEI = 1_000_000_000;
-
-    // const lockedAmount = ONE_GWEI;
-    // const unlockTime = (await time.latest()) + ONE_YEAR_IN_SECS;
-
-    // Contracts are deployed using the first signer/account by default
     const [owner, otherAccount] = await ethers.getSigners();
 
     const UnitedSwapToken = await ethers.getContractFactory("UnitedSwapToken");
@@ -65,9 +58,9 @@ describe("UnitedSwap Token", function () {
 
       expect(await unitedswaptoken.totalSupply()).to.equal("0");
 
-      await unitedswaptoken['mint(uint256)'](mintAmount)
-      ownerBalance = await unitedswaptoken.balanceOf(owner.address)
-      expect(await unitedswaptoken.balanceOf(owner.address)).to.equal(mintAmount);
+      await unitedswaptoken['mint(uint256)'](mintAmount);
+      await unitedswaptoken["mint(address,uint256)"](owner.address, mintAmount);
+      expect(await unitedswaptoken.balanceOf(owner.address)).to.equal(mintAmount.mul(2));
     });
 
     it("Should not mint if called by otherAccount", async function () {
@@ -85,7 +78,7 @@ describe("UnitedSwap Token", function () {
       );
     });
 
-    it("Should be able to transfer back and forth", async function () {
+    it("Should be able to transfer/transferFrom back and forth", async function () {
       const { 
         unitedswaptoken,
         owner,
@@ -100,13 +93,50 @@ describe("UnitedSwap Token", function () {
 
       expect(await unitedswaptoken.balanceOf(owner.address)).to.equal(mintAmount);
 
-      await unitedswaptoken.transfer(otherAccount.address, mintAmount);
-      expect(await unitedswaptoken.balanceOf(otherAccount.address)).to.equal(mintAmount);
-      expect(await unitedswaptoken.balanceOf(owner.address)).to.equal(0);
+      await unitedswaptoken.transfer(otherAccount.address, mintAmount.div(2));
+      expect(await unitedswaptoken.balanceOf(otherAccount.address)).to.equal(mintAmount.div(2));
+      expect(await unitedswaptoken.balanceOf(owner.address)).to.equal(mintAmount.div(2));
 
-      await unitedswaptoken.connect(otherAccount).transfer(owner.address, mintAmount);
+      await unitedswaptoken.connect(otherAccount).transfer(owner.address, mintAmount.div(2));
       expect(await unitedswaptoken.balanceOf(owner.address)).to.equal(mintAmount);
       expect(await unitedswaptoken.balanceOf(otherAccount.address)).to.equal(0);
+
+      await unitedswaptoken.approve(otherAccount.address, mintAmount);
+      await unitedswaptoken.connect(otherAccount).transferFrom(owner.address, otherAccount.address, mintAmount);
+    });
+  });
+  describe("Solidity Coverage", function () {
+    it("Should set the right owner", async function () {
+      const {
+        unitedswaptoken,
+        owner
+      } = await loadFixture(deployUnitedSwapTokenFixture);
+
+      expect(await unitedswaptoken.getOwner()).to.equal(owner.address);
+    });
+
+    it("Should set the right decimals", async function () {
+      const {
+        unitedswaptoken,
+      } = await loadFixture(deployUnitedSwapTokenFixture);
+
+      expect(await unitedswaptoken.decimals()).to.equal(18);
+    });
+
+    it("Should check, set, increase, and decrease approve/allowance", async function () {
+      const {
+        unitedswaptoken,
+        owner,
+        otherAccount
+      } = await loadFixture(deployUnitedSwapTokenFixture);
+
+      const approveAmmount = ethers.utils.parseUnits("100");
+
+      expect(await unitedswaptoken.allowance(owner.address, otherAccount.address)).to.equal(0);
+      await unitedswaptoken.approve(otherAccount.address, approveAmmount)
+      expect(await unitedswaptoken.allowance(owner.address, otherAccount.address)).to.equal(approveAmmount);
+      await unitedswaptoken.increaseAllowance(otherAccount.address, approveAmmount.mul(2))
+      await unitedswaptoken.decreaseAllowance(otherAccount.address, approveAmmount.div(2))
     });
   });
 });

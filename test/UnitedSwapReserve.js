@@ -21,37 +21,53 @@ describe("UnitedSwap Reserve", function () {
     const UnitedSwapReserve = await ethers.getContractFactory("UnitedSwapReserve");
     const unitedswapreserve = await UnitedSwapReserve.deploy(unitedswaptoken.address, burnAdmin.address);
 
+    unitedswapreserve.deployed()
+
+    const MockBEP20 = await ethers.getContractFactory("MockBEP20");
+    const mockbep20 = await MockBEP20.deploy();
+
+    mockbep20.deployed();
+
     await unitedswapreserve.deployed()
     await unitedswaptoken.transferOwnership(unitedswapreserve.address)
 
-    return { unitedswapreserve, unitedswaptoken, owner, otherAccount };
+    return { unitedswapreserve, unitedswaptoken, mockbep20, owner, otherAccount };
   }
 
-  describe("Deployment", function () {
-    it("Should be deployed", async function () {
+  describe("Basic checks", function () {
+    it("Should add / set pool if called by owner", async function () {
       const {
+        unitedswapreserve,
         unitedswaptoken,
+        mockbep20,
         owner
       } = await loadFixture(deployUnitedSwapReserveFixture);
 
-      expect(await unitedswaptoken.owner()).to.equal(owner.address);
+      const maxAllocPoint = ethers.utils.parseUnits("100");
+      const halfAllocPoint = ethers.utils.parseUnits("50");
+
+      expect(await unitedswapreserve.poolLength()).to.equal("0");
+      await unitedswapreserve.add(maxAllocPoint, mockbep20.address, 'True', 'True');
+      expect(await unitedswapreserve.poolLength()).to.equal("1");
+
+      const poolInfo = await unitedswapreserve.poolInfo(0)
+
+      expect(poolInfo.allocPoint).to.equal(maxAllocPoint);
+      await unitedswapreserve.set("0", halfAllocPoint, 'True');
     });
 
-    it("Should set the right name and ticker", async function () {
-      const { 
-        unitedswaptoken
-      } = await loadFixture(deployUnitedSwapTokenFixture);
+    it("Should revert if add pool called not by owner", async function () {
+      const {
+        unitedswapreserve,
+        otherAccount,
+        mockbep20
+      } = await loadFixture(deployUnitedSwapReserveFixture);
 
-      expect(await unitedswaptoken.name()).to.equal("UnitedSwap Token");
-      expect(await unitedswaptoken.symbol()).to.equal("US");
-    });
+      const maxAllocPoint = ethers.utils.parseUnits("100");
 
-    it("Should set initial supply to 0", async function () {
-      const { 
-        unitedswaptoken
-      } = await loadFixture(deployUnitedSwapTokenFixture);
-
-      expect(await unitedswaptoken.totalSupply()).to.equal("0");
+      await expect(unitedswapreserve.connect(otherAccount).add(maxAllocPoint, mockbep20.address, 'True', 'True')).to.be.revertedWith(
+        "Ownable: caller is not the owner"
+      );
     });
 
     it("Should mint if called by owner", async function () {
