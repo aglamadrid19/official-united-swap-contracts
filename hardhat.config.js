@@ -1,7 +1,15 @@
 require("@nomicfoundation/hardhat-toolbox");
+require("@nomiclabs/hardhat-ethers");
+require("@nomiclabs/hardhat-web3");
+require("solidity-coverage");
+require("dotenv/config");
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
+  defaultNetwork: "hardhat",
+  networks: {
+    hardhat: {},
+  },
   solidity: {
     compilers: [
       {
